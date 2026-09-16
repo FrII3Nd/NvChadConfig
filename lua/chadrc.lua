@@ -4,15 +4,18 @@
 
 ---@type ChadrcConfig
 local M = {}
-
+M.ui = {
+  theme = "default-dark", 
+}
 M.base46 = {
-	theme = "onedark",
+	theme = "default-dark",
 
 	-- hl_override = {
 	-- 	Comment = { italic = true },
 	-- 	["@comment"] = { italic = true },
 	-- },
 }
+vim.cmd("source /home/*/.config/nvim/lua/plugins/DoxygenToolkit.vim")
 
 -- M.nvdash = { load_on_startup = true }
 -- M.ui = {

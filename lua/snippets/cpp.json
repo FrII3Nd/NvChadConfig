@@ -1,0 +1,38 @@
+{
+  "Header Guard (Auto)": {
+    "prefix": "once",
+    "body": [
+      "#ifndef ${TM_FILENAME_BASE/([a-z])|([A-Z])|([^a-zA-Z0-9])/${1:+$1}${2:$2}${3:+_}/g}_hpp",
+      "#define ${TM_FILENAME_BASE/([a-z])|([A-Z])|([^a-zA-Z0-9])/${1:+$1}${2:$2}${3:+_}/g}_hpp",
+      "",
+      "$0",
+      "",
+      "#endif // ${TM_FILENAME_BASE/([a-z])|([A-Z])|([^a-zA-Z0-9])/${1:+$1}${2:$2}${3:+_}/g}_hpp"
+    ],
+    "description": "Header Guard"
+  },
+
+  "Class Template": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "public:",
+      "\t${1:Name}($2);",
+      "",
+      "private:",
+      "\t$0",
+      "};"
+    ],
+    "description": "Class base structure"
+  },
+
+  "Range-based for loop": {
+    "prefix": "fore",
+    "body": [
+      "for (const auto& ${1:item} : ${2:container}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "For loop in container"
+  }
+}

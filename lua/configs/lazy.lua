@@ -1,7 +1,7 @@
 return {
   defaults = { lazy = true },
   install = { colorscheme = { "nvchad" } },
-
+{ "xiyaowong/transparent.nvim" },
   ui = {
     icons = {
       ft = "",
