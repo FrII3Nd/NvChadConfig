@@ -37,7 +37,7 @@ return {
                 -- errorformat для gcc/clang:
                 errorformat = "%f:%l:%c: %trror: %m",
               },
-              "on_result_diagnostics",
+              "cmake_build_diagnostics", -- очищает старые ошибки при каждом билде
             },
           },
           on_new_task = function(task)
