@@ -43,7 +43,10 @@ end
 
 setup_smart_compile_commands()
 
-local on_init = require("nvchad.configs.lspconfig").on_init
+-- NvChad по умолчанию ГАСИТ semantic tokens: их on_init выставляет
+-- client.server_capabilities.semanticTokensProvider = nil. Нам семантические
+-- токены clangd нужны, поэтому подменяем on_init пустой функцией.
+local on_init = function() end
 
 -- Красивый hover для LSP (clangd и др.): скруглённая рамка + ограничение размера.
 -- Фокус не забирает и закрывается при движении курсора — это Neovim делает сам.
@@ -76,6 +79,14 @@ vim.lsp.config("clangd", {
   },
   filetypes = { "c", "cpp", "objc", "objcpp", "cuda", "proto" },
   on_attach = function(client, bufnr)
+    -- Семантические токены clangd: точная подсветка сущностей по данным
+    -- компилятора (функции, параметры, типы, пространства имён). В nvim 0.12
+    -- они включены глобально по умолчанию — включаем явно и per-buffer,
+    -- чтобы не зависеть от дефолтов и было видно в конфиге.
+    if client:supports_method "textDocument/semanticTokens/full" then
+      vim.lsp.semantic_tokens.enable(true, { bufnr = bufnr })
+    end
+
     -- подсветка inlay hints (типы у аргументов, вывод шаблонов и т.д.)
     vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
   end,
@@ -93,6 +104,23 @@ vim.lsp.config("clangd", {
 
 vim.lsp.enable "clangd"
 vim.lsp.enable "lua_ls"
+
+-- clangd помечает литералы true/false как semantic token типа "keyword",
+-- поэтому они красились как ключевые слова (в светлых темах — фиолетовым).
+-- Перекрашиваем такие токены в @boolean (цвет чисел/констант темы).
+vim.api.nvim_create_autocmd("LspTokenUpdate", {
+  callback = function(ev)
+    local token = ev.data.token
+    if token.type ~= "keyword" then
+      return
+    end
+    local line = vim.api.nvim_buf_get_lines(ev.buf, token.line, token.line + 1, false)[1]
+    local text = line and line:sub(token.start_col + 1, token.end_col)
+    if text == "true" or text == "false" then
+      vim.lsp.semantic_tokens.highlight_token(token, ev.buf, ev.data.client_id, "@boolean")
+    end
+  end,
+})
 
 -- cmake-language-server ставится через :MasonInstall cmake-language-server
 -- включаем только если он реально установлен (иначе ошибки спавна)

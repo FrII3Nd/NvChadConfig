@@ -47,6 +47,20 @@ dofile(vim.g.base46_cache .. "statusline")
 require "options"
 require "autocmds"
 
+-- base46: часть интеграций (например lsp) грузится в eager-плагинах ДО того,
+-- как Neovim применит дефолтную цветовую схему, и она перекрывает цвета темы
+-- (DiagnosticError/Warn и т.п. становились NvimDark*). Переприменяем все кэши
+-- темы один раз — после старта, когда дефолтная схема уже применена.
+vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
+  once = true,
+  callback = function()
+    local dir = vim.g.base46_cache
+    for _, f in ipairs(vim.fn.readdir(dir)) do
+      pcall(dofile, dir .. f)
+    end
+  end,
+})
+
 vim.schedule(function()
   require "mappings"
 end)

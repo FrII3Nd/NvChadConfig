@@ -1,6 +1,7 @@
 return {
   {
     "stevearc/conform.nvim",
+    lazy = false, -- иначе config не выполняется и formatters_by_ft не применяются
     -- event = 'BufWritePre', -- uncomment for format on save
     opts = require "configs.conform",
   },
@@ -16,8 +17,59 @@ return {
 
   {
     "nvim-treesitter/nvim-treesitter",
+    -- opts ДОЛЖЕН быть функцией: NvChad в своём opts грузит кэши темы
+    -- (syntax/treesitter). Раньше здесь была таблица — она перезаписывала
+    -- функцию NvChad, и синтаксис оставался в дефолтной схеме Neovim.
+    opts = function(_, opts)
+      for _, cache in ipairs { "syntax", "treesitter", "semantic_tokens" } do
+        pcall(dofile, vim.g.base46_cache .. cache)
+      end
+
+      opts.ensure_installed = { "vim", "lua", "cpp", "c", "cmake", "markdown", "markdown_inline" }
+      return opts
+    end,
+  },
+
+  -- Синтаксические текстовые объекты (af/if, ac/ic, ]f/[f и т.п.).
+  -- ВАЖНО: ветка main — у неё свои queries/*/textobjects.scm,
+  -- совместимые с nvim-treesitter main (установленным у тебя).
+  {
+    "nvim-treesitter/nvim-treesitter-textobjects",
+    branch = "main",
+    dependencies = { "nvim-treesitter/nvim-treesitter" },
+    event = { "BufReadPost", "BufNewFile" },
+    config = function()
+      require("nvim-treesitter-textobjects").setup {
+        select = {
+          -- автопрыжок вперёд к объекту, как в targets.vim
+          lookahead = true,
+          -- 'V' = построчно для функций/классов, 'v' = посимвольно
+          selection_modes = {
+            ["@function.outer"] = "V",
+            ["@class.outer"] = "V",
+          },
+        },
+        move = {
+          -- оставлять записи в jumplist для <C-o>/<C-i>
+          set_jumps = true,
+        },
+      }
+    end,
+  },
+
+  -- «Липкий» контекст: сверху окна видно, внутри какой функции/класса курсор
+  {
+    "nvim-treesitter/nvim-treesitter-context",
+    dependencies = { "nvim-treesitter/nvim-treesitter" },
+    event = { "BufReadPost", "BufNewFile" },
     opts = {
-      ensure_installed = { "vim", "lua", "cpp", "c", "cmake", "markdown", "markdown_inline" },
+      enable = true,
+      max_lines = 3, -- максимум строк контекста
+      multiline_threshold = 20, -- сколько строк одной функции сворачивать в одну
+      trim_scope = "outer",
+      mode = "cursor",
+      line_numbers = true,
+      zindex = 200, -- выше dap-view/noice
     },
   },
 
@@ -192,17 +244,19 @@ return {
       },
       },
     },
-{
-  "p00f/clangd_extensions.nvim",
-  config = function()
-    require("clangd_extensions").setup({
-      symbol_info = {
-        border = "rounded",  -- Optional styling
-        -- Add height/width here if supported, or hook vim.lsp.util.open_floating_preview
-      },
-    })
-  end,
-},
+  {
+    "p00f/clangd_extensions.nvim",
+    lazy = false, -- в configs/lazy.lua defaults.lazy = true, а триггеров у плагина нет;
+    -- без этого команды :Clangd* не создаются и <leader>ch не работает
+    config = function()
+      require("clangd_extensions").setup({
+        symbol_info = {
+          border = "rounded", -- Optional styling
+          -- Add height/width here if supported, or hook vim.lsp.util.open_floating_preview
+        },
+      })
+    end,
+  },
   -- Mason DAP для автоматической установки codelldb
   {
     "jay-babu/mason-nvim-dap.nvim",
@@ -295,14 +349,32 @@ return {
       vim.api.nvim_set_hl(0, "NvimDapViewWatchExpr", { fg = "#7cafc2", bold = true })
       vim.api.nvim_set_hl(0, "NvimDapViewWatchUpdated", { fg = "#e5c07b" })
 
-      -- gdb говорит на DAP нативно (нужен gdb >= 14).
-      -- command меняется на нужный кросс-gdb: xtensa-esp-elf-gdb / arm-none-eabi-gdb / riscv32-esp-elf-gdb
-      local gdb_adapter = {
-        type = "executable",
-        command = "gdb",
-        args = { "-q", "--interpreter=dap", "--eval-command=set print pretty on" },
-      }
-      dap.adapters.gdb = gdb_adapter
+      -- gdb говорит на DAP нативно, но нужен билд gdb >= 14, собранный С поддержкой DAP.
+      -- ВАЖНО: Xilinx arm-none-eabi-gdb 14.2 из Vitis СОБРАН БЕЗ DAP
+      --   `arm-none-eabi-gdb --interpreter=dap` -> "Interpreter `dap' unrecognized"
+      -- поэтому Vitis-gdb напрямую с nvim-dap не работает.
+      -- Нужен ARM-gdb с DAP. Лучший вариант в этом контейнере — gdb-multiarch (Ubuntu 15.1):
+      --   sudo apt update && sudo apt install -y gdb-multiarch
+      local function pick_gdb()
+        for _, cmd in ipairs { "gdb-multiarch", "gdb" } do
+          if vim.fn.executable(cmd) == 1 then
+            return cmd
+          end
+        end
+        return "gdb"
+      end
+
+      local function make_gdb_adapter()
+        return {
+          type = "executable",
+          command = pick_gdb(),
+          args = { "-q", "--interpreter=dap", "--eval-command=set print pretty on" },
+        }
+      end
+
+      dap.adapters.gdb = function(cb, _)
+        cb(make_gdb_adapter())
+      end
 
       -- gdbserver: сами поднимаем `gdbserver --attach <pid>` и подключаемся к нему.
       -- PID приходит из конфигурации (process_id); gdb подключается через `target remote`.
@@ -360,7 +432,7 @@ return {
 
         config.target = ("127.0.0.1:%d"):format(actual_port) -- gdb выполнит `target remote`
         config.process_id = nil -- чтобы gdb не делал локальный attach по pid
-        cb(gdb_adapter)
+        cb(make_gdb_adapter())
       end
 
       -- Гасим поднятые gdbserver при завершении сессии
@@ -458,6 +530,27 @@ return {
             return vim.fn.input("gdb server (host:port): ", "localhost:3333")
           end,
           program = get_cmake_bin, -- ELF с символами (для embedded обязателен)
+          cwd = "${workspaceFolder}",
+        },
+        -- Xilinx hw_server (Vitis): сам открывает GDB-порты по архитектурам.
+        -- База задаётся `hw_server -p<base>` (по умолчанию 3000):
+        --   3000 = ARM 32-bit (Zynq-7000: Cortex-A9; Cortex-R5)
+        --   3001 = ARM 64-bit (ZynqMP/Versal: Cortex-A53)
+        -- hw_server должен видеть таргет: предварительно `xsdb` -> connect -> targets.
+        {
+          name = "Xilinx hw_server (ARM 32-bit :3000)",
+          type = "gdb",
+          request = "attach",
+          target = "localhost:3000",
+          program = get_cmake_bin, -- ELF с символами, обязателен для embedded
+          cwd = "${workspaceFolder}",
+        },
+        {
+          name = "Xilinx hw_server (ARM 64-bit :3001)",
+          type = "gdb",
+          request = "attach",
+          target = "localhost:3001",
+          program = get_cmake_bin,
           cwd = "${workspaceFolder}",
         },
         -- Обычный локальный запуск (нативный x86-64 gdb)

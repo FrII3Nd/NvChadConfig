@@ -126,3 +126,38 @@ map("n", "<leader>do", function()
   require("dap-view").toggle()
 end, { desc = "DAP View Toggle" })
 map("n", "<leader>dw", "<cmd>DapViewWatch<cr>", { desc = "DAP Watch expression" })
+
+-- Treesitter textobjects: выбор и переходы по синтаксическим узлам (C++, C и др.)
+local ts_select = function(query)
+  return function()
+    require("nvim-treesitter-textobjects.select").select_textobject(query, "textobjects")
+  end
+end
+local ts_move = function(method, query)
+  return function()
+    require("nvim-treesitter-textobjects.move")[method](query, "textobjects")
+  end
+end
+
+-- выбор: visual + operator-pending (например "daf" = удалить функцию целиком)
+map({ "x", "o" }, "af", ts_select "@function.outer", { desc = "TS: функция целиком" })
+map({ "x", "o" }, "if", ts_select "@function.inner", { desc = "TS: тело функции" })
+map({ "x", "o" }, "ac", ts_select "@class.outer", { desc = "TS: класс целиком" })
+map({ "x", "o" }, "ic", ts_select "@class.inner", { desc = "TS: тело класса" })
+map({ "x", "o" }, "aa", ts_select "@parameter.outer", { desc = "TS: аргумент (с запятой)" })
+map({ "x", "o" }, "ia", ts_select "@parameter.inner", { desc = "TS: аргумент" })
+
+-- переходы: ]f/[f — начало, ]F/[F — конец, ]c/[c — класс, ]a/[a — аргумент
+map({ "n", "x", "o" }, "]f", ts_move("goto_next_start", "@function.outer"), { desc = "TS: след. функция" })
+map({ "n", "x", "o" }, "[f", ts_move("goto_previous_start", "@function.outer"), { desc = "TS: пред. функция" })
+map({ "n", "x", "o" }, "]F", ts_move("goto_next_end", "@function.outer"), { desc = "TS: конец след. функции" })
+map({ "n", "x", "o" }, "[F", ts_move("goto_previous_end", "@function.outer"), { desc = "TS: конец пред. функции" })
+map({ "n", "x", "o" }, "]c", ts_move("goto_next_start", "@class.outer"), { desc = "TS: след. класс" })
+map({ "n", "x", "o" }, "[c", ts_move("goto_previous_start", "@class.outer"), { desc = "TS: пред. класс" })
+map({ "n", "x", "o" }, "]a", ts_move("goto_next_start", "@parameter.outer"), { desc = "TS: след. аргумент" })
+map({ "n", "x", "o" }, "[a", ts_move("goto_previous_start", "@parameter.outer"), { desc = "TS: пред. аргумент" })
+
+-- Переход к контексту, показанному nvim-treesitter-context (наверх)
+map("n", "<leader>uc", function()
+  require("treesitter-context").go_to_context(vim.v.count1)
+end, { desc = "Context: перейти к обрамляющей функции" })
